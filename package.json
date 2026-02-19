@@ -1,0 +1,29 @@
+{
+  "name": "alwenum-ai",
+  "version": "1.0.0",
+  "description": "In the rapidly evolving legal landscape, information is power. For a Tier-1 Nigerian Law Firm, the ability to rapidly access, analyze, and leverage vast amounts of legal data is not just an advantage—it's a necessity for maintaining a competitive edge and delivering unparalleled client service. 'THE LEGAL ORACLE', powered by 'GHOST ARCHITECT', is not merely a software solution; it's a strategic investment in the firm's future, designed to transform operational efficiency, enhance legal research, and ultimately, drive profitability.",
+  "main": "postcss.config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/node": "^25.3.0",
+    "@types/react": "^19.2.14",
+    "autoprefixer": "^10.4.24",
+    "lucide-react": "^0.575.0",
+    "next": "^16.1.6",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.9.3"
+  }
+}
