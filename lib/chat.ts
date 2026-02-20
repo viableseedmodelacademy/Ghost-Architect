@@ -84,7 +84,10 @@ export async function ChatLocal(messages: Message[]) {
   const readableStream = new ReadableStream({
     async start(controller) {
       for await (const chunk of stream) {
-        controller.enqueue(encoder.encode(chunk.content));
+        const content = typeof chunk.content === 'string' 
+          ? chunk.content 
+          : JSON.stringify(chunk.content);
+        controller.enqueue(encoder.encode(content));
       }
       controller.close();
     },
