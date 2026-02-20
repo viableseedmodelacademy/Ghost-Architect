@@ -12,30 +12,51 @@ interface FileContext {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, useLocal, apiKey, fileContexts } = body as {
-      messages: Array<{ role: string; content: string }>;
+    
+    // Support both old and new request formats
+    const { message, messages, useLocal, apiKey, files, fileContexts, mode } = body as {
+      message?: string;
+      messages?: Array<{ role: string; content: string }>;
       useLocal?: boolean;
       apiKey?: string;
+      files?: FileContext[];
       fileContexts?: FileContext[];
+      mode?: string;
     };
 
+    // Determine if using local mode
+    const isLocalMode = useLocal || mode === "local";
+    
+    // Get the message - either single message or from messages array
+    const userMessage = message || (messages && messages.length > 0 ? messages[messages.length - 1].content : "");
+    
+    // Get file contexts - support both 'files' and 'fileContexts' property names
+    const effectiveFileContexts = files || fileContexts || [];
+
     // For cloud mode, check if API key is available (from env or provided)
-    if (!useLocal) {
+    if (!isLocalMode) {
       const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
-      if (!effectiveApiKey) {
+      if (!effectiveApiKey || effectiveApiKey === "your_gemini_api_key_here") {
         return NextResponse.json(
-          { error: "API key is required. Please set GEMINI_API_KEY in your .env.local file or provide it in Settings." },
+          { error: "API key is required. Please set GEMINI_API_KEY in your environment variables." },
           { status: 400 }
         );
       }
     }
 
     try {
-      if (useLocal) {
-        const stream = await ChatLocal(messages, fileContexts);
+      if (isLocalMode) {
+        const stream = await ChatLocal(
+          userMessage ? [{ role: "user", content: userMessage }] : messages || [],
+          effectiveFileContexts
+        );
         return new NextResponse(stream);
       } else {
-        const stream = await ChatCloud(messages, apiKey, fileContexts);
+        const stream = await ChatCloud(
+          userMessage ? [{ role: "user", content: userMessage }] : messages || [],
+          apiKey,
+          effectiveFileContexts
+        );
         return new NextResponse(stream);
       }
     } catch (error) {
