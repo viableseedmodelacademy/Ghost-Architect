@@ -1,167 +1,237 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Key, Save, Eye, EyeOff, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import React, { useState } from "react";
+import { Lock, Shield, Loader2, Copy, Check, CheckCircle2, AlertCircle } from "lucide-react";
 
 const Settings = () => {
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
+  // Password Change State
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [newHash, setNewHash] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    // Load API key from localStorage on mount
-    const savedKey = localStorage.getItem("gemini_api_key");
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
-  }, []);
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+    setNewHash("");
 
-  const handleSave = () => {
-    if (!apiKey.trim()) {
-      setError("Please enter a valid API key");
+    // Validate
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError("All fields are required");
       return;
     }
 
-    // Save to localStorage
-    localStorage.setItem("gemini_api_key", apiKey.trim());
-    setSaved(true);
-    setError("");
-    
-    setTimeout(() => setSaved(false), 3000);
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters");
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to change password");
+      }
+
+      setPasswordSuccess(data.message);
+      setNewHash(data.newHash);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
-  const handleClear = () => {
-    localStorage.removeItem("gemini_api_key");
-    setApiKey("");
-    setSaved(false);
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
     <div className="space-y-8">
-      {/* API Key Section */}
+      {/* Password Change Section */}
       <div className="bg-surface/30 rounded-2xl border border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
-            <Key className="text-navy-dark" size={20} />
+            <Lock className="text-navy-dark" size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-gold">API Configuration</h3>
-            <p className="text-xs text-muted">Configure your Gemini API key for cloud mode</p>
+            <h3 className="text-lg font-bold text-gold">Change Password</h3>
+            <p className="text-xs text-muted">Update your account password</p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          {/* Current Password */}
           <div>
             <label className="block text-sm font-medium text-gold mb-2">
-              Gemini API Key
+              Current Password
             </label>
             <div className="relative">
               <input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key..."
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
                 className="w-full px-4 py-3 pr-12 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200"
               />
               <button
                 type="button"
-                onClick={() => setShowKey(!showKey)}
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-gold transition-colors"
               >
-                {showKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showCurrentPassword ? "Hide" : "Show"}
               </button>
             </div>
-            <p className="mt-2 text-xs text-muted">
-              Get your API key from{" "}
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gold hover:text-gold-light underline"
+          </div>
+
+          {/* New Password */}
+          <div>
+            <label className="block text-sm font-medium text-gold mb-2">
+              New Password
+            </label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password (min 8 characters)"
+                className="w-full px-4 py-3 pr-12 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-gold transition-colors"
               >
-                Google AI Studio
-              </a>
-            </p>
+                {showNewPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm New Password */}
+          <div>
+            <label className="block text-sm font-medium text-gold mb-2">
+              Confirm New Password
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="w-full px-4 py-3 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200"
+            />
           </div>
 
           {/* Status Messages */}
-          {error && (
+          {passwordError && (
             <div className="flex items-center gap-2 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
               <AlertCircle size={16} />
-              {error}
+              {passwordError}
             </div>
           )}
 
-          {saved && (
-            <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm animate-fade-in">
-              <CheckCircle2 size={16} />
-              API key saved successfully!
+          {passwordSuccess && (
+            <div className="p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 size={16} />
+                {passwordSuccess}
+              </div>
+              {newHash && (
+                <div className="mt-3 p-3 bg-navy-dark/50 rounded-lg border border-border">
+                  <p className="text-xs text-muted mb-2">
+                    For Vercel deployment, update your environment variable:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs text-gold flex-1 break-all">{newHash}</code>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(newHash)}
+                      className="p-2 hover:bg-surface rounded-lg transition-colors"
+                      title="Copy hash"
+                    >
+                      {copied ? <Check size={16} className="text-success" /> : <Copy size={16} className="text-muted" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleSave}
-              className="flex-1 py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 transition-all duration-200 btn-hover-lift flex items-center justify-center gap-2"
-            >
-              <Save size={18} />
-              Save API Key
-            </button>
-            <button
-              onClick={handleClear}
-              className="px-4 py-3 bg-surface hover:bg-error/10 border border-border hover:border-error/30 text-muted hover:text-error rounded-xl transition-all duration-200 flex items-center justify-center"
-            >
-              <Trash2 size={18} />
-            </button>
-          </div>
-        </div>
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={passwordLoading}
+            className="w-full py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover-lift flex items-center justify-center gap-2"
+          >
+            {passwordLoading ? (
+              <>
+                <Loader2 className="animate-spin" size={18} />
+                <span>Updating...</span>
+              </>
+            ) : (
+              <>
+                <Shield size={18} />
+                <span>Change Password</span>
+              </>
+            )}
+          </button>
+        </form>
       </div>
 
-      {/* Local Mode Info */}
+      {/* System Info */}
       <div className="bg-surface/30 rounded-2xl border border-border p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-success/20 flex items-center justify-center">
-            <Key className="text-success" size={20} />
+        <h3 className="text-lg font-bold text-gold mb-4">System Information</h3>
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted">Version</span>
+            <span className="text-gold">1.0.0</span>
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-gold">Local Mode</h3>
-            <p className="text-xs text-muted">No API key required</p>
+          <div className="flex justify-between">
+            <span className="text-muted">Platform</span>
+            <span className="text-gold">Alwenum AI</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">AI Model</span>
+            <span className="text-gold">Gemini Pro</span>
           </div>
         </div>
-        <p className="text-sm text-muted">
-          When Local Mode is enabled, the application uses Ollama running on your local machine. 
-          Make sure Ollama is installed and running with your preferred model (e.g., llama2).
-        </p>
-        <div className="mt-4 p-3 bg-navy-dark/50 rounded-lg border border-border">
-          <code className="text-xs text-gold">
-            ollama run llama2
-          </code>
-        </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="bg-surface/30 rounded-2xl border border-border p-6">
-        <h3 className="text-lg font-bold text-gold mb-4">How to Use</h3>
-        <ol className="space-y-3 text-sm text-muted">
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gold/20 text-gold flex items-center justify-center text-xs font-bold">1</span>
-            <span>Get your API key from Google AI Studio (link above)</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gold/20 text-gold flex items-center justify-center text-xs font-bold">2</span>
-            <span>Paste the API key in the field above and click Save</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gold/20 text-gold flex items-center justify-center text-xs font-bold">3</span>
-            <span>Go to Dashboard and start chatting with THE LEGAL ORACLE</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gold/20 text-gold flex items-center justify-center text-xs font-bold">4</span>
-            <span>Toggle Local Mode if you want to use Ollama instead</span>
-          </li>
-        </ol>
       </div>
     </div>
   );

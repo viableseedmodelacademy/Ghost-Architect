@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import FileUploader from "../components/FileUploader";
 import ChatWindow from "../components/ChatWindow";
 import Settings from "../components/Settings";
-import { Scale, Brain, Shield, Zap } from "lucide-react";
+import LoginPage from "../components/LoginPage";
+import { Scale, Brain, Shield, Zap, LogOut, Loader2 } from "lucide-react";
 
 interface FileContext {
   name: string;
@@ -18,10 +19,73 @@ interface FileContext {
 export default function Home() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [processedFiles, setProcessedFiles] = useState<FileContext[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState("");
+
+  // Check authentication status on mount - NO AUTO-LOGIN
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch("/api/auth/change-password");
+      const data = await response.json();
+      
+      // Only set logged in if session is actually valid
+      if (data.isLoggedIn && data.expiresAt > Date.now()) {
+        setIsLoggedIn(true);
+        setUserEmail(data.email);
+      } else {
+        setIsLoggedIn(false);
+        setUserEmail("");
+      }
+    } catch {
+      setIsLoggedIn(false);
+      setUserEmail("");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+    // Re-verify session after login
+    checkAuthStatus();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (error) {
+      // Ignore logout errors
+    } finally {
+      // Always clear local state
+      setIsLoggedIn(false);
+      setUserEmail("");
+    }
+  };
 
   const handleFilesProcessed = (files: FileContext[]) => {
     setProcessedFiles(files);
   };
+
+  // Show loading screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-navy flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="animate-spin text-gold mx-auto mb-4" size={48} />
+          <p className="text-muted">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated - MUST LOGIN EACH TIME
+  if (!isLoggedIn) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="flex min-h-screen bg-navy">
@@ -35,10 +99,25 @@ export default function Home() {
                 THE LEGAL ORACLE
               </h1>
               <p className="text-muted mt-1">
-                Enterprise-grade AI-powered legal research platform
+                AI-powered document chat platform
               </p>
             </div>
             <div className="flex items-center gap-6">
+              {/* User Info & Logout */}
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-sm text-gold">{userEmail}</p>
+                  <p className="text-xs text-muted">Authenticated</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2.5 rounded-xl bg-surface hover:bg-error/10 border border-border hover:border-error/30 transition-all duration-200 group"
+                  title="Logout"
+                >
+                  <LogOut className="text-muted group-hover:text-error" size={20} />
+                </button>
+              </div>
+              
               {/* Feature Badges */}
               <div className="hidden md:flex items-center gap-4">
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-surface/50 rounded-lg border border-border">
@@ -66,7 +145,7 @@ export default function Home() {
               <div className="animate-fade-in">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gold">Settings</h2>
-                  <p className="text-muted">Configure your API keys and preferences</p>
+                  <p className="text-muted">Manage your account settings</p>
                 </div>
                 <Settings />
               </div>
@@ -78,10 +157,10 @@ export default function Home() {
                 {/* Stats Row */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {[ 
-                    { label: "Documents Indexed", value: processedFiles.length.toString(), icon: Scale },
-                    { label: "Queries Processed", value: "15.2K", icon: Brain },
-                    { label: "Avg Response Time", value: "1.2s", icon: Zap },
-                    { label: "Accuracy Rate", value: "99.2%", icon: Shield },
+                    { label: "Documents Uploaded", value: processedFiles.length.toString(), icon: Scale },
+                    { label: "Chat Sessions", value: "Active", icon: Brain },
+                    { label: "Response Time", value: "Fast", icon: Zap },
+                    { label: "Status", value: "Online", icon: Shield },
                   ].map((stat, i) => (
                     <div
                       key={i}
@@ -121,15 +200,15 @@ export default function Home() {
                       </div>
                       <div>
                         <h2 className="text-xl font-bold text-gold">Quick Actions</h2>
-                        <p className="text-xs text-muted">Common research tasks</p>
+                        <p className="text-xs text-muted">Common document tasks</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       {[
-                        { title: "Case Law Search", desc: "Find relevant precedents" },
-                        { title: "Statute Analysis", desc: "Interpret legislation" },
-                        { title: "Contract Review", desc: "Analyze agreements" },
-                        { title: "Legal Brief", desc: "Generate summaries" },
+                        { title: "Summarize", desc: "Get document summary" },
+                        { title: "Extract Key Points", desc: "Find important info" },
+                        { title: "Compare Documents", desc: "Analyze differences" },
+                        { title: "Ask Questions", desc: "Chat with documents" },
                       ].map((action, i) => (
                         <button
                           key={i}
@@ -157,7 +236,7 @@ export default function Home() {
               <div className="animate-fade-in">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gold">Private Vault</h2>
-                  <p className="text-muted">Upload and manage your legal documents</p>
+                  <p className="text-muted">Upload and manage your documents</p>
                 </div>
                 <div className="bg-surface/20 rounded-2xl border border-border p-6">
                   <FileUploader onFilesProcessed={handleFilesProcessed} processedFiles={processedFiles} />
@@ -211,8 +290,8 @@ export default function Home() {
         {/* Footer */}
         <footer className="px-8 py-4 border-t border-border bg-surface/20">
           <div className="flex items-center justify-between text-xs text-muted">
-            <p>© 2024 GHOST ARCHITECT. All rights reserved.</p>
-            <p>Powered by AI • Enterprise-grade security</p>
+            <p>© 2024 THE LEGAL ORACLE. All rights reserved.</p>
+            <p>Powered By Alwenum AI</p>
           </div>
         </footer>
       </main>

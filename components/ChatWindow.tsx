@@ -1,14 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { MessageSquarePlus, Send, CornerDownLeft, Globe, Bot, User, Sparkles, Loader2 } from "lucide-react";
-import { parseCitation } from "../app/lib/citation";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  citations?: { document: string; page: number }[];
-}
+import React, { useState, useRef, useEffect } from "react";
+import { Send, Scale, Loader2, FileText, AlertCircle, Trash2, MessageSquare } from "lucide-react";
+import { createChatSession, addMessageToSession, getChatSessions, deleteChatSession, ChatSession, ChatMessage } from "../lib/chatMemory";
 
 interface FileContext {
   name: string;
@@ -19,288 +13,286 @@ interface FileContext {
 }
 
 interface ChatWindowProps {
-  processedFiles?: FileContext[];
+  processedFiles: FileContext[];
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles = [] }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [useLocal, setUseLocal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Load sessions on mount
   useEffect(() => {
-    scrollToBottom();
+    const loadedSessions = getChatSessions();
+    setSessions(loadedSessions);
+    
+    // Create new session if none exists
+    if (loadedSessions.length === 0) {
+      const newSession = createChatSession("New Chat");
+      setCurrentSession(newSession);
+      setSessions([newSession]);
+    } else {
+      setCurrentSession(loadedSessions[0]);
+      setMessages(loadedSessions[0].messages);
+    }
+  }, []);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (input.trim() === "" || loading) return;
+  const handleNewChat = () => {
+    const newSession = createChatSession("New Chat");
+    setCurrentSession(newSession);
+    setMessages([]);
+    setSessions(prev => [newSession, ...prev]);
+  };
 
-    const userMessage: ChatMessage = { role: "user", content: input };
-    setMessages((prev) => [...prev, userMessage]);
+  const handleSelectSession = (session: ChatSession) => {
+    setCurrentSession(session);
+    setMessages(session.messages);
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    deleteChatSession(sessionId);
+    const updatedSessions = sessions.filter(s => s.id !== sessionId);
+    setSessions(updatedSessions);
+    
+    if (currentSession?.id === sessionId) {
+      if (updatedSessions.length > 0) {
+        setCurrentSession(updatedSessions[0]);
+        setMessages(updatedSessions[0].messages);
+      } else {
+        handleNewChat();
+      }
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!input.trim() || loading) return;
+    
+    // Check if documents are uploaded
+    if (processedFiles.length === 0) {
+      setError("Please upload documents first to start chatting.");
+      return;
+    }
+
+    const userMessage = input.trim();
     setInput("");
+    setError(null);
     setLoading(true);
 
-    // Get API key from localStorage (optional - env variable takes priority)
-    const apiKey = typeof window !== 'undefined' ? localStorage.getItem("gemini_api_key") : null;
+    // Add user message to state and storage
+    const userMsg = currentSession 
+      ? addMessageToSession(currentSession.id, "user", userMessage)
+      : null;
+    
+    if (userMsg) {
+      setMessages(prev => [...prev, userMsg]);
+    }
 
     try {
+      // Prepare file context
+      const fileContexts = processedFiles.map(f => ({
+        name: f.name,
+        content: f.content || ""
+      }));
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          messages: [...messages, userMessage], 
-          useLocal,
-          apiKey: useLocal ? undefined : apiKey,
-          fileContexts: processedFiles.length > 0 ? processedFiles.map(f => ({
-            name: f.name,
-            content: f.content || '',
-            type: f.type
-          })) : undefined
+        body: JSON.stringify({
+          message: userMessage,
+          files: fileContexts,
+          mode: "cloud"
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || response.statusText);
+        throw new Error("Failed to get response. Please try again.");
       }
 
-      const data = response.body;
-      if (!data) return;
-
-      const reader = data.getReader();
-      const decoder = new TextDecoder();
-      let assistantResponse = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        assistantResponse += chunk;
-
-        setMessages((prev) => {
-          const lastMessage = prev[prev.length - 1];
-          if (lastMessage && lastMessage.role === "assistant") {
-            const { content, citations } = parseCitation(assistantResponse);
-            return [
-              ...prev.slice(0, prev.length - 1),
-              { ...lastMessage, content, citations },
-            ];
-          } else {
-            const { content, citations } = parseCitation(assistantResponse);
-            return [...prev, { role: "assistant", content, citations }];
-          }
-        });
+      const data = await response.json();
+      
+      // Add assistant message
+      const assistantMsg = currentSession
+        ? addMessageToSession(currentSession.id, "assistant", data.response)
+        : null;
+      
+      if (assistantMsg) {
+        setMessages(prev => [...prev, assistantMsg]);
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      const errorMessage = error instanceof Error ? error.message : "Sorry, something went wrong. Please try again.";
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: errorMessage },
-      ]);
+
+      // Update sessions list
+      setSessions(getChatSessions());
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return (
-    <div className="flex flex-col h-full bg-navy-light rounded-2xl border border-border overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between p-5 border-b border-border bg-surface/30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
-            <Bot className="text-navy-dark" size={22} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-gold">THE LEGAL ORACLE</h2>
-            <p className="text-xs text-muted">AI-Powered Legal Research Assistant</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-3 px-4 py-2 bg-navy-dark/50 rounded-lg border border-border">
-            <Globe size={16} className={useLocal ? "text-success" : "text-muted"} />
-            <span className="text-sm text-muted">{useLocal ? "Ollama" : "Gemini"}</span>
+    <div className="flex h-full">
+      {/* Chat Sidebar */}
+      {showSidebar && (
+        <div className="w-64 bg-surface/30 border-r border-border flex flex-col">
+          <div className="p-4 border-b border-border">
             <button
-              onClick={() => setUseLocal(!useLocal)}
-              className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
-                useLocal ? "bg-success" : "bg-gold"
-              }`}
-              title={useLocal ? "Switch to Gemini API (Cloud)" : "Switch to Ollama (Local)"}
+              onClick={handleNewChat}
+              className="w-full py-2.5 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 transition-all duration-200 flex items-center justify-center gap-2"
             >
-              <div
-                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${
-                  useLocal ? "translate-x-5" : "translate-x-0.5"
-                }`}
-              />
+              <MessageSquare size={18} />
+              New Chat
             </button>
           </div>
-          {/* New Chat Button */}
-          <button
-            onClick={() => setMessages([])}
-            className="p-2.5 rounded-xl bg-surface hover:bg-surface/80 border border-border hover:border-gold/30 transition-all duration-200 btn-hover-lift"
-            title="New Chat"
-          >
-            <MessageSquarePlus className="text-gold" size={20} />
-          </button>
+          
+          <div className="flex-1 overflow-y-auto p-2">
+            {sessions.map(session => (
+              <div
+                key={session.id}
+                className={`group p-3 rounded-xl mb-1 cursor-pointer transition-all duration-200 ${
+                  currentSession?.id === session.id
+                    ? "bg-gold/20 border border-gold/30"
+                    : "hover:bg-surface/50"
+                }`}
+                onClick={() => handleSelectSession(session)}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gold truncate flex-1">{session.title}</p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSession(session.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-error/20 rounded transition-all"
+                  >
+                    <Trash2 size={14} className="text-error" />
+                  </button>
+                </div>
+                <p className="text-xs text-muted mt-1">
+                  {session.messages.length} messages
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      </header>
+      )}
 
-      {/* Messages Area */}
-      <main className="flex-1 p-6 overflow-y-auto space-y-6">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold/20 to-gold/5 flex items-center justify-center mb-6 glow-gold-sm">
-              <Sparkles className="text-gold" size={36} />
-            </div>
-            <h3 className="text-2xl font-bold text-gold mb-2">Welcome to THE LEGAL ORACLE</h3>
-            <p className="text-muted max-w-md mb-8">
-              Your AI-powered legal research assistant. Ask any legal question and get instant, cited responses from your document vault.
-            </p>
-            {processedFiles.length > 0 && (
-              <p className="text-sm text-success mb-4">
-                📄 {processedFiles.length} document{processedFiles.length !== 1 ? "s" : ""} loaded and ready for analysis
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border bg-surface/20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="p-2 hover:bg-surface rounded-lg transition-colors"
+            >
+              <MessageSquare size={20} className="text-gold" />
+            </button>
+            <div>
+              <h2 className="text-lg font-bold text-gold">Document Chat</h2>
+              <p className="text-xs text-muted">
+                {processedFiles.length} documents loaded
               </p>
-            )}
-            <div className="grid grid-cols-2 gap-4 max-w-lg">
-              {[
-                "What are the key provisions of Nigerian contract law?",
-                "Explain the doctrine of stare decisis",
-                "Recent Supreme Court rulings on property rights",
-                "Corporate governance requirements for PLCs"
-              ].map((suggestion, i) => (
-                <button
-                  key={i}
-                  onClick={() => setInput(suggestion)}
-                  className="p-4 text-left text-sm text-muted bg-surface/50 hover:bg-surface border border-border hover:border-gold/30 rounded-xl transition-all duration-200"
-                >
-                  {suggestion}
-                </button>
-              ))}
             </div>
           </div>
-        )}
+        </div>
 
-        {messages.map((msg, index) => (
-          <div
-            key={index}
-            className={`flex gap-4 animate-fade-in ${
-              msg.role === "user" ? "flex-row-reverse" : ""
-            }`}
-          >
-            {/* Avatar */}
-            <div
-              className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
-                msg.role === "user"
-                  ? "bg-gold/20"
-                  : "bg-gradient-to-br from-gold to-gold-light"
-              }`}
-            >
-              {msg.role === "user" ? (
-                <User className="text-gold" size={20} />
-              ) : (
-                <Bot className="text-navy-dark" size={20} />
-              )}
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {messages.length === 0 && (
+            <div className="text-center py-12">
+              <FileText className="mx-auto text-gold mb-4" size={48} />
+              <h3 className="text-xl font-bold text-gold mb-2">Start Chatting</h3>
+              <p className="text-muted max-w-md mx-auto">
+                Upload documents in the Private Vault and ask questions about them.
+                The AI will analyze your documents and provide insights.
+              </p>
             </div>
+          )}
 
-            {/* Message Content */}
+          {messages.map((message) => (
             <div
-              className={`flex-1 max-w-[75%] ${
-                msg.role === "user" ? "text-right" : ""
-              }`}
+              key={message.id}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`inline-block p-4 rounded-2xl ${
-                  msg.role === "user"
-                    ? "bg-gold text-navy-dark rounded-tr-sm"
-                    : "bg-surface border border-border rounded-tl-sm"
+                className={`max-w-[80%] p-4 rounded-2xl ${
+                  message.role === "user"
+                    ? "bg-gold text-navy-dark"
+                    : "bg-surface/50 border border-border text-gold"
                 }`}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className={`text-xs mt-2 ${
+                  message.role === "user" ? "text-navy-dark/60" : "text-muted"
+                }`}>
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </p>
               </div>
-              
-              {/* Citations */}
-              {msg.citations && msg.citations.length > 0 && (
-                <div className="mt-3 p-3 bg-navy-dark/50 rounded-lg border border-border">
-                  <p className="text-xs font-semibold text-gold mb-2">📚 Sources:</p>
-                  <ul className="space-y-1">
-                    {msg.citations.map((citation, cIndex) => (
-                      <li key={cIndex} className="text-xs text-muted flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-gold rounded-full"></span>
-                        {citation.document} (Page {citation.page})
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* Loading Indicator */}
-        {loading && (
-          <div className="flex gap-4 animate-fade-in">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
-              <Bot className="text-navy-dark" size={20} />
-            </div>
-            <div className="bg-surface border border-border rounded-2xl rounded-tl-sm p-4">
-              <div className="flex items-center gap-2">
-                <Loader2 className="text-gold animate-spin" size={18} />
-                <span className="text-sm text-muted">Analyzing legal documents...</span>
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-surface/50 border border-border p-4 rounded-2xl">
+                <div className="flex items-center gap-2 text-gold">
+                  <Loader2 className="animate-spin" size={20} />
+                  <span>Analyzing documents...</span>
+                </div>
               </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="px-6 py-3 bg-error/10 border-t border-error/20">
+            <div className="flex items-center gap-2 text-error">
+              <AlertCircle size={18} />
+              <span className="text-sm">{error}</span>
             </div>
           </div>
         )}
 
-        <div ref={messagesEndRef} />
-      </main>
-
-      {/* Input Area */}
-      <footer className="p-5 border-t border-border bg-surface/30">
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
+        {/* Input Area */}
+        <div className="p-4 border-t border-border bg-surface/20">
+          <form onSubmit={handleSubmit} className="flex gap-3">
             <input
               type="text"
-              placeholder={loading ? "Analyzing..." : "Ask a legal question..."}
-              className="w-full px-5 py-4 pr-12 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
+              placeholder={processedFiles.length === 0 
+                ? "Upload documents first to start chatting..." 
+                : "Ask a question about your documents..."
+              }
+              disabled={loading || processedFiles.length === 0}
+              className="flex-1 px-4 py-3 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200 disabled:opacity-50"
             />
-            <CornerDownLeft
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted"
-              size={18}
-            />
-          </div>
-          <button
-            onClick={handleSendMessage}
-            disabled={loading || !input.trim()}
-            className="px-6 py-4 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover-lift flex items-center gap-2"
-          >
-            <Send size={20} />
-            <span>Send</span>
-          </button>
+            <button
+              type="submit"
+              disabled={loading || !input.trim() || processedFiles.length === 0}
+              className="px-6 py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
+            >
+              <Send size={18} />
+            </button>
+          </form>
         </div>
-        <p className="mt-3 text-xs text-muted text-center">
-          THE LEGAL ORACLE provides AI-assisted research. Always verify with official sources.
-        </p>
-      </footer>
+      </div>
     </div>
   );
 };
