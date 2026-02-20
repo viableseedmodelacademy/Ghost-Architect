@@ -2,44 +2,104 @@
 
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { FileUp, FileText, XCircle, CloudUpload, CheckCircle2, FolderOpen } from "lucide-react";
+import { FileUp, FileText, XCircle, CloudUpload, CheckCircle2, FolderOpen, AlertTriangle } from "lucide-react";
 
 interface FileEntry {
   name: string;
   size: number;
   type: string;
   lastModified: number;
+  content?: string;
 }
 
-const FileUploader = () => {
-  const [files, setFiles] = useState<FileEntry[]>([]);
+interface FileUploaderProps {
+  onFilesProcessed?: (files: FileEntry[]) => void;
+  processedFiles?: FileEntry[];
+}
+
+const MAX_FILES = 500;
+
+const FileUploader: React.FC<FileUploaderProps> = ({ onFilesProcessed, processedFiles = [] }) => {
+  const [files, setFiles] = useState<FileEntry[]>(processedFiles);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles((prev) => [
-      ...prev,
-      ...acceptedFiles.map((file) => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-      })),
-    ]);
-  }, []);
+    setError(null);
+    
+    // Check if adding these files would exceed the limit
+    if (files.length + acceptedFiles.length > MAX_FILES) {
+      setError(`Maximum ${MAX_FILES} files allowed. You currently have ${files.length} files and are trying to add ${acceptedFiles.length} more.`);
+      return;
+    }
+
+    // Read file contents
+    const filePromises = acceptedFiles.map((file) => {
+      return new Promise<FileEntry>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            lastModified: file.lastModified,
+            content: reader.result as string,
+          });
+        };
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+        reader.readAsDataURL(file); // Read as base64 for PDF support
+      });
+    });
+
+    Promise.all(filePromises)
+      .then((newFiles) => {
+        setFiles((prev) => [...prev, ...newFiles]);
+      })
+      .catch((err) => {
+        setError(err.message);
+      });
+  }, [files.length]);
 
   const removeFile = (fileName: string) => {
     setFiles((prev) => prev.filter((file) => file.name !== fileName));
+    setError(null);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
-    maxFiles: 500,
+    maxFiles: MAX_FILES,
   });
 
   const totalSize = files.reduce((acc, file) => acc + file.size, 0);
 
+  const handleProcessFiles = () => {
+    if (files.length === 0) return;
+    
+    setProcessing(true);
+    // Pass files to parent component for chat integration
+    if (onFilesProcessed) {
+      onFilesProcessed(files);
+    }
+    
+    setTimeout(() => {
+      setProcessing(false);
+    }, 1000);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Error Message */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-error/10 border border-error/20 rounded-xl text-error animate-fade-in">
+          <AlertTriangle size={20} />
+          <span className="text-sm">{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto">
+            <XCircle size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Upload Area */}
       <div
         {...getRootProps()}
@@ -83,9 +143,9 @@ const FileUploader = () => {
                   <CheckCircle2 size={14} className="text-success" />
                   PDF only
                 </span>
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 size={14} className="text-success" />
-                  Max 500 files
+                <span className={`flex items-center gap-1 ${files.length >= MAX_FILES ? 'text-error' : ''}`}>
+                  <CheckCircle2 size={14} className={files.length >= MAX_FILES ? "text-error" : "text-success"} />
+                  {files.length}/{MAX_FILES} files
                 </span>
                 <span className="flex items-center gap-1">
                   <CheckCircle2 size={14} className="text-success" />
@@ -153,9 +213,13 @@ const FileUploader = () => {
 
           {/* Process Button */}
           <div className="p-4 border-t border-border bg-surface/50">
-            <button className="w-full py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 transition-all duration-200 btn-hover-lift flex items-center justify-center gap-2">
-              <CloudUpload size={18} />
-              Process Documents
+            <button 
+              onClick={handleProcessFiles}
+              disabled={processing || files.length === 0}
+              className="w-full py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 transition-all duration-200 btn-hover-lift flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CloudUpload size={18} className={processing ? "animate-spin" : ""} />
+              {processing ? "Processing..." : "Process Documents"}
             </button>
           </div>
         </div>

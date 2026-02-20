@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Aperture, Upload, MessageSquareText, Settings, Globe, ChevronRight, Sparkles, FileText, Shield } from 'lucide-react';
 
-const Sidebar = () => {
-  const [activeItem, setActiveItem] = useState('dashboard');
-  const [isLocalMode, setIsLocalMode] = useState(false);
+interface SidebarProps {
+  activeSection: string;
+  setActiveSection: (section: string) => void;
+}
 
+const Sidebar = ({ activeSection, setActiveSection }: SidebarProps) => {
   const menuItems = [
     { id: 'dashboard', icon: MessageSquareText, label: 'Dashboard' },
     { id: 'vault', icon: Upload, label: 'Private Vault' },
@@ -39,11 +41,11 @@ const Sidebar = () => {
           <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeItem === item.id;
+              const isActive = activeSection === item.id;
               return (
                 <li key={item.id}>
                   <button
-                    onClick={() => setActiveItem(item.id)}
+                    onClick={() => setActiveSection(item.id)}
                     className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group ${
                       isActive
                         ? 'bg-surface text-gold border border-gold/20'
@@ -85,31 +87,15 @@ const Sidebar = () => {
         </div>
       </nav>
 
-      {/* Mode Toggle */}
+      {/* Mode Info */}
       <div className="p-4 border-t border-border">
         <div className="bg-surface/50 rounded-xl p-4 border border-border">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Globe size={18} className={isLocalMode ? 'text-success' : 'text-muted'} />
-              <span className="text-sm font-medium text-gold">Local Mode</span>
-            </div>
-            <button
-              onClick={() => setIsLocalMode(!isLocalMode)}
-              className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
-                isLocalMode ? 'bg-success' : 'bg-border'
-              }`}
-            >
-              <div
-                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${
-                  isLocalMode ? 'translate-x-7' : 'translate-x-1'
-                }`}
-              />
-            </button>
+          <div className="flex items-center gap-2 mb-2">
+            <Globe size={18} className="text-gold" />
+            <span className="text-sm font-medium text-gold">Cloud Mode</span>
           </div>
           <p className="text-xs text-muted">
-            {isLocalMode
-              ? 'Running on local infrastructure'
-              : 'Connected to cloud services'}
+            Connected to Gemini AI for legal research
           </p>
         </div>
 

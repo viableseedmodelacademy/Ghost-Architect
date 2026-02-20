@@ -10,7 +10,19 @@ interface ChatMessage {
   citations?: { document: string; page: number }[];
 }
 
-const ChatWindow = () => {
+interface FileContext {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+  content?: string;
+}
+
+interface ChatWindowProps {
+  processedFiles?: FileContext[];
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles = [] }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,17 +45,30 @@ const ChatWindow = () => {
     setInput("");
     setLoading(true);
 
+    // Get API key from localStorage (optional - env variable takes priority)
+    const apiKey = typeof window !== 'undefined' ? localStorage.getItem("gemini_api_key") : null;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: [...messages, userMessage], useLocal }),
+        body: JSON.stringify({ 
+          messages: [...messages, userMessage], 
+          useLocal,
+          apiKey: useLocal ? undefined : apiKey,
+          fileContexts: processedFiles.length > 0 ? processedFiles.map(f => ({
+            name: f.name,
+            content: f.content || '',
+            type: f.type
+          })) : undefined
+        }),
       });
 
       if (!response.ok) {
-        throw new Error(response.statusText);
+        const errorData = await response.json();
+        throw new Error(errorData.error || response.statusText);
       }
 
       const data = response.body;
@@ -76,9 +101,10 @@ const ChatWindow = () => {
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      const errorMessage = error instanceof Error ? error.message : "Sorry, something went wrong. Please try again.";
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+        { role: "assistant", content: errorMessage },
       ]);
     } finally {
       setLoading(false);
@@ -109,12 +135,13 @@ const ChatWindow = () => {
           {/* Mode Toggle */}
           <div className="flex items-center gap-3 px-4 py-2 bg-navy-dark/50 rounded-lg border border-border">
             <Globe size={16} className={useLocal ? "text-success" : "text-muted"} />
-            <span className="text-sm text-muted">Local</span>
+            <span className="text-sm text-muted">{useLocal ? "Ollama" : "Gemini"}</span>
             <button
               onClick={() => setUseLocal(!useLocal)}
               className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
-                useLocal ? "bg-success" : "bg-border"
+                useLocal ? "bg-success" : "bg-gold"
               }`}
+              title={useLocal ? "Switch to Gemini API (Cloud)" : "Switch to Ollama (Local)"}
             >
               <div
                 className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${
@@ -145,6 +172,11 @@ const ChatWindow = () => {
             <p className="text-muted max-w-md mb-8">
               Your AI-powered legal research assistant. Ask any legal question and get instant, cited responses from your document vault.
             </p>
+            {processedFiles.length > 0 && (
+              <p className="text-sm text-success mb-4">
+                📄 {processedFiles.length} document{processedFiles.length !== 1 ? "s" : ""} loaded and ready for analysis
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4 max-w-lg">
               {[
                 "What are the key provisions of Nigerian contract law?",
