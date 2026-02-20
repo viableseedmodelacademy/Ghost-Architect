@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { MessageSquarePlus, Send, CornerDownLeft, Globe } from "lucide-react";
+import { MessageSquarePlus, Send, CornerDownLeft, Globe, Bot, User, Sparkles, Loader2 } from "lucide-react";
 import { parseCitation } from "../app/lib/citation";
 
 interface ChatMessage {
@@ -78,7 +78,7 @@ const ChatWindow = () => {
       console.error("Error sending message:", error);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, something went wrong." },
+        { role: "assistant", content: "Sorry, something went wrong. Please try again." },
       ]);
     } finally {
       setLoading(false);
@@ -93,48 +93,123 @@ const ChatWindow = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-navy-light rounded-lg shadow-xl">
-      <header className="flex items-center justify-between p-4 border-b border-gold-dark">
-        <h2 className="text-2xl font-bold text-gold">Chat with THE ORACLE</h2>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center">
-            <Globe className="text-gold mr-2" size={20} />
-            <span className="text-sm text-gold">Local Mode:</span>
-            <input
-              type="checkbox"
-              checked={useLocal}
-              onChange={() => setUseLocal(!useLocal)}
-              className="ml-2 toggle toggle-gold"
-            />
+    <div className="flex flex-col h-full bg-navy-light rounded-2xl border border-border overflow-hidden">
+      {/* Header */}
+      <header className="flex items-center justify-between p-5 border-b border-border bg-surface/30">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
+            <Bot className="text-navy-dark" size={22} />
           </div>
-          <button className="p-2 rounded-full hover:bg-navy-dark transition-colors">
-            <MessageSquarePlus className="text-gold" size={24} />
+          <div>
+            <h2 className="text-lg font-bold text-gold">THE LEGAL ORACLE</h2>
+            <p className="text-xs text-muted">AI-Powered Legal Research Assistant</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-3 px-4 py-2 bg-navy-dark/50 rounded-lg border border-border">
+            <Globe size={16} className={useLocal ? "text-success" : "text-muted"} />
+            <span className="text-sm text-muted">Local</span>
+            <button
+              onClick={() => setUseLocal(!useLocal)}
+              className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
+                useLocal ? "bg-success" : "bg-border"
+              }`}
+            >
+              <div
+                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${
+                  useLocal ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          {/* New Chat Button */}
+          <button
+            onClick={() => setMessages([])}
+            className="p-2.5 rounded-xl bg-surface hover:bg-surface/80 border border-border hover:border-gold/30 transition-all duration-200 btn-hover-lift"
+            title="New Chat"
+          >
+            <MessageSquarePlus className="text-gold" size={20} />
           </button>
         </div>
       </header>
-      <main className="flex-1 p-6 overflow-y-auto space-y-4">
+
+      {/* Messages Area */}
+      <main className="flex-1 p-6 overflow-y-auto space-y-6">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold/20 to-gold/5 flex items-center justify-center mb-6 glow-gold-sm">
+              <Sparkles className="text-gold" size={36} />
+            </div>
+            <h3 className="text-2xl font-bold text-gold mb-2">Welcome to THE LEGAL ORACLE</h3>
+            <p className="text-muted max-w-md mb-8">
+              Your AI-powered legal research assistant. Ask any legal question and get instant, cited responses from your document vault.
+            </p>
+            <div className="grid grid-cols-2 gap-4 max-w-lg">
+              {[
+                "What are the key provisions of Nigerian contract law?",
+                "Explain the doctrine of stare decisis",
+                "Recent Supreme Court rulings on property rights",
+                "Corporate governance requirements for PLCs"
+              ].map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInput(suggestion)}
+                  className="p-4 text-left text-sm text-muted bg-surface/50 hover:bg-surface border border-border hover:border-gold/30 rounded-xl transition-all duration-200"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`flex ${
-              msg.role === "user" ? "justify-end" : "justify-start"
+            className={`flex gap-4 animate-fade-in ${
+              msg.role === "user" ? "flex-row-reverse" : ""
             }`}
           >
+            {/* Avatar */}
             <div
-              className={`max-w-[70%] p-3 rounded-lg ${(
+              className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
                 msg.role === "user"
-                  ? "bg-gold text-navy-dark"
-                  : "bg-navy-dark text-gold"
-              )}
-                ${msg.citations && msg.citations.length > 0 ? "mb-2" : ""}`}
+                  ? "bg-gold/20"
+                  : "bg-gradient-to-br from-gold to-gold-light"
+              }`}
             >
-              <p>{msg.content}</p>
+              {msg.role === "user" ? (
+                <User className="text-gold" size={20} />
+              ) : (
+                <Bot className="text-navy-dark" size={20} />
+              )}
+            </div>
+
+            {/* Message Content */}
+            <div
+              className={`flex-1 max-w-[75%] ${
+                msg.role === "user" ? "text-right" : ""
+              }`}
+            >
+              <div
+                className={`inline-block p-4 rounded-2xl ${
+                  msg.role === "user"
+                    ? "bg-gold text-navy-dark rounded-tr-sm"
+                    : "bg-surface border border-border rounded-tl-sm"
+                }`}
+              >
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+              </div>
+              
+              {/* Citations */}
               {msg.citations && msg.citations.length > 0 && (
-                <div className="mt-2 text-xs text-gray-400">
-                  <p className="font-semibold">Sources:</p>
-                  <ul className="list-disc list-inside">
+                <div className="mt-3 p-3 bg-navy-dark/50 rounded-lg border border-border">
+                  <p className="text-xs font-semibold text-gold mb-2">📚 Sources:</p>
+                  <ul className="space-y-1">
                     {msg.citations.map((citation, cIndex) => (
-                      <li key={cIndex}>
+                      <li key={cIndex} className="text-xs text-muted flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-gold rounded-full"></span>
                         {citation.document} (Page {citation.page})
                       </li>
                     ))}
@@ -144,31 +219,55 @@ const ChatWindow = () => {
             </div>
           </div>
         ))}
+
+        {/* Loading Indicator */}
+        {loading && (
+          <div className="flex gap-4 animate-fade-in">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
+              <Bot className="text-navy-dark" size={20} />
+            </div>
+            <div className="bg-surface border border-border rounded-2xl rounded-tl-sm p-4">
+              <div className="flex items-center gap-2">
+                <Loader2 className="text-gold animate-spin" size={18} />
+                <span className="text-sm text-muted">Analyzing legal documents...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </main>
-      <footer className="p-4 border-t border-gold-dark flex items-center">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder={loading ? "Thinking..." : "Type your message..."}
-            className="w-full p-3 pl-4 pr-12 bg-navy-dark border border-gold-dark rounded-lg text-gold placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gold"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={loading}
-          />
-          <CornerDownLeft
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
-            size={20}
-          />
+
+      {/* Input Area */}
+      <footer className="p-5 border-t border-border bg-surface/30">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder={loading ? "Analyzing..." : "Ask a legal question..."}
+              className="w-full px-5 py-4 pr-12 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
+            />
+            <CornerDownLeft
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+              size={18}
+            />
+          </div>
+          <button
+            onClick={handleSendMessage}
+            disabled={loading || !input.trim()}
+            className="px-6 py-4 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover-lift flex items-center gap-2"
+          >
+            <Send size={20} />
+            <span>Send</span>
+          </button>
         </div>
-        <button
-          onClick={handleSendMessage}
-          className="ml-4 p-3 bg-gold text-navy-dark rounded-lg hover:bg-yellow-400 transition-colors flex items-center justify-center"
-          disabled={loading}
-        >
-          <Send size={24} />
-        </button>
+        <p className="mt-3 text-xs text-muted text-center">
+          THE LEGAL ORACLE provides AI-assisted research. Always verify with official sources.
+        </p>
       </footer>
     </div>
   );
