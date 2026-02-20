@@ -1,7 +1,3 @@
-import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
-import { ChatOllama } from "@langchain/community/chat_models/ollama";
-import { ChatMemory } from "./memory";
-
 interface Message {
   role: string;
   content: string;
@@ -13,16 +9,12 @@ interface FileContext {
   type: string;
 }
 
-// Initialize Ollama (Local Mode)
-const modelLocal = new ChatOllama({
-  baseUrl: "http://localhost:11434",
-  model: "llama3", // Updated to llama3 as requested
-});
+// Together AI API configuration
+const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
 
 // Get API key from environment or use provided key
 function getApiKey(providedKey?: string): string {
-  // Priority: provided key > environment variable
-  const apiKey = providedKey || process.env.GEMINI_API_KEY || "";
+  const apiKey = providedKey || process.env.TOGETHER_API_KEY || "";
   return apiKey;
 }
 
@@ -52,100 +44,175 @@ Always maintain a professional, authoritative, yet accessible tone. When citing 
   return systemPrompt;
 }
 
-export async function ChatCloud(messages: Message[], apiKey?: string, fileContexts?: FileContext[]) {
-  // Get API key from environment or provided key
-  const key = getApiKey(apiKey);
+// Together AI chat completion
+async function togetherChat(
+  messages: Message[], 
+  apiKey: string, 
+  fileContexts?: FileContext[],
+  stream: boolean = true
+): Promise<ReadableStream> {
+  const systemPrompt = buildSystemPrompt(fileContexts);
   
-  if (!key) {
-    throw new Error("API key is required. Please set GEMINI_API_KEY in your environment or provide it in settings.");
-  }
-
-  const genAI = new GoogleGenerativeAI(key);
-  const modelCloud = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-  const memory = new ChatMemory();
-  const chatHistory = await memory.getChatHistory();
-
-  // Build system prompt with file context
-  const systemPrompt = buildSystemPrompt(fileContexts);
-
-  // Format messages for Gemini
-  const formattedMessages = [
-    { role: "user", parts: [{ text: systemPrompt }] },
-    { role: "model", parts: [{ text: "I understand. I am THE LEGAL ORACLE, ready to assist with your legal research needs. I will analyze any uploaded documents and provide accurate, professional legal assistance." }] },
-    ...chatHistory.map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] })),
-    ...messages.map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] })),
-  ];
-
-  const result = await modelCloud.generateContentStream({
-    contents: formattedMessages,
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-    ],
-  });
-
-  const encoder = new TextEncoder();
-  const readableStream = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of result.stream) {
-        const chunkText = chunk.text();
-        controller.enqueue(encoder.encode(chunkText));
-      }
-      controller.close();
-    },
-  });
-
-  return readableStream;
-}
-
-export async function ChatLocal(messages: Message[], fileContexts?: FileContext[]) {
-  const memory = new ChatMemory();
-  const chatHistory = await memory.getChatHistory();
-
-  // Build system prompt with file context
-  const systemPrompt = buildSystemPrompt(fileContexts);
-
+  // Format messages for Together AI (OpenAI-compatible format)
   const formattedMessages = [
     { role: "system", content: systemPrompt },
-    ...chatHistory.map((msg) => ({
-      role: msg.role === "user" ? "user" : "assistant",
-      content: msg.content,
-    })),
     ...messages.map((msg) => ({
       role: msg.role === "user" ? "user" : "assistant",
       content: msg.content,
     })),
   ];
 
-  const stream = await modelLocal.stream(formattedMessages);
-
-  const encoder = new TextEncoder();
-  const readableStream = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of stream) {
-        const content = typeof chunk.content === 'string' 
-          ? chunk.content 
-          : JSON.stringify(chunk.content);
-        controller.enqueue(encoder.encode(content));
-      }
-      controller.close();
+  const response = await fetch(TOGETHER_API_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({
+      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      messages: formattedMessages,
+      max_tokens: 4096,
+      temperature: 0.7,
+      top_p: 0.9,
+      stream: stream,
+    }),
   });
 
-  return readableStream;
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `Together AI error: ${response.status}`);
+  }
+
+  if (!stream) {
+    // Non-streaming response
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const encoder = new TextEncoder();
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(content));
+        controller.close();
+      },
+    });
+  }
+
+  // Streaming response
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Failed to get response stream");
+  }
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content || "";
+                if (content) {
+                  controller.enqueue(encoder.encode(content));
+                }
+              } catch {
+                // Skip invalid JSON
+              }
+            }
+          }
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
+// Cloud chat using Together AI
+export async function ChatCloud(messages: Message[], apiKey?: string, fileContexts?: FileContext[]) {
+  const key = getApiKey(apiKey);
+  
+  if (!key) {
+    throw new Error("API key is required. Please set TOGETHER_API_KEY in your environment or provide it in settings.");
+  }
+
+  return togetherChat(messages, key, fileContexts, true);
+}
+
+// Local chat (Ollama) - kept for backward compatibility
+export async function ChatLocal(messages: Message[], fileContexts?: FileContext[]) {
+  const systemPrompt = buildSystemPrompt(fileContexts);
+
+  const formattedMessages = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((msg) => ({
+      role: msg.role === "user" ? "user" : "assistant",
+      content: msg.content,
+    })),
+  ];
+
+  const response = await fetch("http://localhost:11434/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "llama3",
+      messages: formattedMessages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama error: ${response.status}. Make sure Ollama is running locally.`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Failed to get response stream");
+  }
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n").filter(Boolean);
+
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line);
+              const content = parsed.message?.content || "";
+              if (content) {
+                controller.enqueue(encoder.encode(content));
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
 }

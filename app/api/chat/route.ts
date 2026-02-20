@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ChatCloud, ChatLocal } from "../../../lib/chat";
 
-export const runtime = "nodejs"; // Changed from edge to nodejs for better compatibility
+export const runtime = "nodejs";
 
 interface FileContext {
   name: string;
@@ -35,10 +35,10 @@ export async function POST(req: NextRequest) {
 
     // For cloud mode, check if API key is available (from env or provided)
     if (!isLocalMode) {
-      const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
-      if (!effectiveApiKey || effectiveApiKey === "your_gemini_api_key_here") {
+      const effectiveApiKey = apiKey || process.env.TOGETHER_API_KEY;
+      if (!effectiveApiKey || effectiveApiKey === "your_together_api_key_here") {
         return NextResponse.json(
-          { error: "API key is required. Please set GEMINI_API_KEY in your environment variables." },
+          { error: "API key is required. Please set TOGETHER_API_KEY in your environment variables. Get your free key at https://api.together.xyz/" },
           { status: 400 }
         );
       }
