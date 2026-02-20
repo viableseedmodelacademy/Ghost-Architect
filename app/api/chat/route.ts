@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
       mode?: string;
     };
 
+    console.log("Chat request received:", { message, useLocal, mode, filesCount: (files || fileContexts)?.length });
+
     // Determine if using local mode
     const isLocalMode = useLocal || mode === "local";
     
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
     if (!isLocalMode) {
       const effectiveApiKey = apiKey || process.env.COHERE_API_KEY;
       if (!effectiveApiKey || effectiveApiKey === "your_cohere_api_key_here") {
+        console.error("API key missing");
         return NextResponse.json(
           { error: "API key is required. Please set COHERE_API_KEY in your environment variables. Get your free key at https://dashboard.cohere.com/" },
           { status: 400 }
@@ -45,19 +48,20 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      const messageArray = userMessage ? [{ role: "user", content: userMessage }] : messages || [];
+      
       if (isLocalMode) {
-        const stream = await ChatLocal(
-          userMessage ? [{ role: "user", content: userMessage }] : messages || [],
-          effectiveFileContexts
-        );
+        const stream = await ChatLocal(messageArray, effectiveFileContexts);
         return new NextResponse(stream);
       } else {
-        const stream = await ChatCloud(
-          userMessage ? [{ role: "user", content: userMessage }] : messages || [],
-          apiKey,
-          effectiveFileContexts
-        );
-        return new NextResponse(stream);
+        console.log("Calling ChatCloud with messages:", messageArray.length);
+        const stream = await ChatCloud(messageArray, apiKey, effectiveFileContexts);
+        console.log("ChatCloud returned stream successfully");
+        return new NextResponse(stream, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+          },
+        });
       }
     } catch (error) {
       console.error("Chat error:", error);

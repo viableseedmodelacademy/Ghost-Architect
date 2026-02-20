@@ -44,7 +44,7 @@ Always maintain a professional, authoritative, yet accessible tone. When citing 
   return systemPrompt;
 }
 
-// Cohere chat completion
+// Cohere chat completion - Non-streaming for reliability
 async function cohereChat(
   messages: Message[], 
   apiKey: string, 
@@ -62,6 +62,7 @@ async function cohereChat(
     message: msg.content,
   }));
 
+  // Use non-streaming for reliability
   const response = await fetch(COHERE_API_URL, {
     method: "POST",
     headers: {
@@ -75,7 +76,6 @@ async function cohereChat(
       chat_history: chatHistory.length > 0 ? chatHistory : undefined,
       max_tokens: 4096,
       temperature: 0.7,
-      stream: true,
     }),
   });
 
@@ -84,48 +84,18 @@ async function cohereChat(
     throw new Error(errorData.message || `Cohere API error: ${response.status}`);
   }
 
-  // Handle streaming response
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Failed to get response stream");
-  }
+  // Parse the response
+  const data = await response.json();
+  const content = data.text || "";
+  
+  console.log("Cohere response:", data);
 
+  // Return as a stream for consistency
   const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
   return new ReadableStream({
-    async start(controller) {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (!data.trim()) continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.event_type === "text-generation") {
-                  const content = parsed.text || "";
-                  if (content) {
-                    controller.enqueue(encoder.encode(content));
-                  }
-                }
-              } catch {
-                // Skip invalid JSON
-              }
-            }
-          }
-        }
-        controller.close();
-      } catch (error) {
-        controller.error(error);
-      }
+    start(controller) {
+      controller.enqueue(encoder.encode(content));
+      controller.close();
     },
   });
 }
