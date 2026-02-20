@@ -329,22 +329,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles }) => {
 
         {/* Input Area */}
         <div className="p-4 border-t border-border bg-surface/20">
-          <form onSubmit={handleSubmit} className="flex gap-3">
-            <input
-              type="text"
+          <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+            <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize textarea
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+              }}
+              onKeyDown={(e) => {
+                // Submit on Enter (without Shift)
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
               placeholder={processedFiles.length === 0 
                 ? "Upload documents first to start chatting..." 
                 : "Ask a question about your documents..."
               }
               disabled={loading || processedFiles.length === 0}
-              className="flex-1 min-w-0 px-4 py-3 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200 disabled:opacity-50"
+              rows={1}
+              className="flex-1 min-w-0 px-4 py-3 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200 disabled:opacity-50 resize-none overflow-y-auto"
+              style={{ maxHeight: '200px' }}
             />
             <button
               type="submit"
               disabled={loading || !input.trim() || processedFiles.length === 0}
-              className="px-4 lg:px-6 py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center"
+              className="px-4 lg:px-6 py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center flex-shrink-0"
             >
               <Send size={18} />
             </button>

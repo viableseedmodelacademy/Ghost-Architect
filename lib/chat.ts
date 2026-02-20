@@ -1,3 +1,6 @@
+import pdf from "pdf-parse";
+import mammoth from "mammoth";
+
 interface Message {
   role: string;
   content: string;
@@ -18,8 +21,112 @@ function getApiKey(providedKey?: string): string {
   return apiKey;
 }
 
+// Extract text from PDF base64 data URL
+async function extractPdfText(dataUrl: string): Promise<string> {
+  try {
+    // Extract base64 data from data URL
+    const base64Match = dataUrl.match(/^data:application\/pdf;base64,(.+)$/);
+    if (!base64Match) {
+      return dataUrl; // Not a PDF data URL, return as-is
+    }
+    
+    const base64Data = base64Match[1];
+    const buffer = Buffer.from(base64Data, "base64");
+    
+    // Parse PDF
+    const data = await pdf(buffer);
+    return data.text;
+  } catch (error) {
+    console.error("PDF extraction error:", error);
+    return "[Could not extract text from this PDF]";
+  }
+}
+
+// Extract text from Word document (docx)
+async function extractWordText(dataUrl: string): Promise<string> {
+  try {
+    // Extract base64 data from data URL
+    const base64Match = dataUrl.match(/^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,(.+)$/);
+    if (!base64Match) {
+      // Try alternative mime type
+      const altMatch = dataUrl.match(/^data:application\/octet-stream;base64,(.+)$/);
+      if (!altMatch) {
+        return dataUrl; // Not a Word data URL, return as-is
+      }
+      const base64Data = altMatch[1];
+      const buffer = Buffer.from(base64Data, "base64");
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
+    
+    const base64Data = base64Match[1];
+    const buffer = Buffer.from(base64Data, "base64");
+    
+    // Extract text from Word document
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  } catch (error) {
+    console.error("Word extraction error:", error);
+    return "[Could not extract text from this Word document]";
+  }
+}
+
+// Extract text from plain text file
+function extractTextFile(dataUrl: string): string {
+  try {
+    // Extract base64 data from data URL
+    const base64Match = dataUrl.match(/^data:text\/plain;base64,(.+)$/);
+    if (!base64Match) {
+      // Try to decode as plain text
+      if (!dataUrl.startsWith("data:")) {
+        return dataUrl;
+      }
+      return "";
+    }
+    
+    const base64Data = base64Match[1];
+    return Buffer.from(base64Data, "base64").toString("utf-8");
+  } catch (error) {
+    console.error("Text file extraction error:", error);
+    return "[Could not extract text from this file]";
+  }
+}
+
+// Process file content - extract text from various formats
+async function processFileContent(file: FileContext): Promise<string> {
+  const content = file.content;
+  
+  if (!content) {
+    return "[No content available]";
+  }
+
+  // Check if it's a PDF data URL
+  if (content.startsWith("data:application/pdf")) {
+    return await extractPdfText(content);
+  }
+  
+  // Check if it's a Word document
+  if (content.startsWith("data:application/vnd.openxmlformats-officedocument.wordprocessingml.document") ||
+      content.startsWith("data:application/octet-stream") ||
+      file.name.endsWith(".docx") || file.name.endsWith(".doc")) {
+    return await extractWordText(content);
+  }
+  
+  // Check if it's a plain text file
+  if (content.startsWith("data:text/plain") || file.name.endsWith(".txt")) {
+    return extractTextFile(content);
+  }
+  
+  // Check if it's already plain text (not a data URL)
+  if (!content.startsWith("data:")) {
+    return content;
+  }
+  
+  return "[Binary file - content not readable]";
+}
+
 // Build system prompt with file context
-function buildSystemPrompt(fileContexts?: FileContext[]): string {
+async function buildSystemPromptWithFiles(fileContexts?: FileContext[]): Promise<string> {
   let systemPrompt = `You are THE LEGAL ORACLE, an expert AI legal research assistant for a prestigious Nigerian law firm. You specialize in Nigerian law, corporate law, contract law, property law, and legal research.
 
 Your capabilities include:
@@ -34,9 +141,13 @@ Always maintain a professional, authoritative, yet accessible tone. When citing 
   if (fileContexts && fileContexts.length > 0) {
     systemPrompt += `\n\nThe user has uploaded the following documents for analysis. Use this context to provide more accurate and relevant responses:\n`;
     
-    fileContexts.forEach((file, index) => {
-      systemPrompt += `\n--- Document ${index + 1}: ${file.name} ---\n${file.content.substring(0, 50000)}\n`; // Limit content to avoid token limits
-    });
+    for (let i = 0; i < fileContexts.length; i++) {
+      const file = fileContexts[i];
+      const extractedText = await processFileContent(file);
+      // Limit to 50000 characters per document
+      const limitedText = extractedText.substring(0, 50000);
+      systemPrompt += `\n--- Document ${i + 1}: ${file.name} ---\n${limitedText}\n`;
+    }
     
     systemPrompt += `\nWhen answering questions, reference specific documents when relevant and cite page numbers if available.`;
   }
@@ -50,7 +161,7 @@ async function cohereChat(
   apiKey: string, 
   fileContexts?: FileContext[]
 ): Promise<ReadableStream> {
-  const systemPrompt = buildSystemPrompt(fileContexts);
+  const systemPrompt = await buildSystemPromptWithFiles(fileContexts);
   
   // Get the last user message
   const lastMessage = messages[messages.length - 1];
@@ -62,6 +173,8 @@ async function cohereChat(
     message: msg.content,
   }));
 
+  console.log("Sending to Cohere with system prompt length:", systemPrompt.length);
+
   // Use non-streaming for reliability
   const response = await fetch(COHERE_API_URL, {
     method: "POST",
@@ -70,7 +183,7 @@ async function cohereChat(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "command-r7b-12-2024",
+      model: "command-a-03-2025",
       message: userMessage,
       preamble: systemPrompt,
       chat_history: chatHistory.length > 0 ? chatHistory : undefined,
@@ -88,7 +201,7 @@ async function cohereChat(
   const data = await response.json();
   const content = data.text || "";
   
-  console.log("Cohere response:", data);
+  console.log("Cohere response length:", content.length);
 
   // Return as a stream for consistency
   const encoder = new TextEncoder();
@@ -113,7 +226,7 @@ export async function ChatCloud(messages: Message[], apiKey?: string, fileContex
 
 // Local chat (Ollama) - kept for backward compatibility
 export async function ChatLocal(messages: Message[], fileContexts?: FileContext[]) {
-  const systemPrompt = buildSystemPrompt(fileContexts);
+  const systemPrompt = await buildSystemPromptWithFiles(fileContexts);
 
   const formattedMessages = [
     { role: "system", content: systemPrompt },

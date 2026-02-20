@@ -67,7 +67,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFilesProcessed, processed
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "application/pdf": [".pdf"] },
+    accept: { 
+      "application/pdf": [".pdf"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/msword": [".doc"],
+      "text/plain": [".txt"]
+    },
     maxFiles: MAX_FILES,
   });
 
@@ -136,12 +141,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFilesProcessed, processed
                 Upload Legal Documents
               </p>
               <p className="text-sm text-muted mb-4">
-                Drag & drop PDF files here, or click to browse
+                Drag & drop files here, or click to browse
               </p>
               <div className="flex items-center justify-center gap-4 text-xs text-muted">
                 <span className="flex items-center gap-1">
                   <CheckCircle2 size={14} className="text-success" />
-                  PDF only
+                  PDF, DOCX, TXT
                 </span>
                 <span className={`flex items-center gap-1 ${files.length >= MAX_FILES ? 'text-error' : ''}`}>
                   <CheckCircle2 size={14} className={files.length >= MAX_FILES ? "text-error" : "text-success"} />
