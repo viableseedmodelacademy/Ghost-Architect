@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatCloud, ChatLocal } from "../../lib/chat";
+import { ChatCloud, ChatLocal } from "../../../lib/chat";
 
 export const runtime = "edge";
 
