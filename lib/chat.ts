@@ -69,7 +69,7 @@ async function cohereChat(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "command-r-plus",
+      model: "command-r7b-12-2024",
       message: userMessage,
       preamble: systemPrompt,
       chat_history: chatHistory.length > 0 ? chatHistory : undefined,
