@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { FileUp, FileText, XCircle } from "lucide-react";

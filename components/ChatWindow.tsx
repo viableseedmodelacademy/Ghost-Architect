@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useRef } from "react";
 import { MessageSquarePlus, Send, CornerDownLeft, Globe } from "lucide-react";
 import { parseCitation } from "../app/lib/citation";
