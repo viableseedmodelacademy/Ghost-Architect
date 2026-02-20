@@ -35,10 +35,10 @@ export async function POST(req: NextRequest) {
 
     // For cloud mode, check if API key is available (from env or provided)
     if (!isLocalMode) {
-      const effectiveApiKey = apiKey || process.env.TOGETHER_API_KEY;
-      if (!effectiveApiKey || effectiveApiKey === "your_together_api_key_here") {
+      const effectiveApiKey = apiKey || process.env.COHERE_API_KEY;
+      if (!effectiveApiKey || effectiveApiKey === "your_cohere_api_key_here") {
         return NextResponse.json(
-          { error: "API key is required. Please set TOGETHER_API_KEY in your environment variables. Get your free key at https://api.together.xyz/" },
+          { error: "API key is required. Please set COHERE_API_KEY in your environment variables. Get your free key at https://dashboard.cohere.com/" },
           { status: 400 }
         );
       }

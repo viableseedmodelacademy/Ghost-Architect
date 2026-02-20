@@ -9,12 +9,12 @@ interface FileContext {
   type: string;
 }
 
-// Together AI API configuration
-const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
+// Cohere API configuration
+const COHERE_API_URL = "https://api.cohere.ai/v1/chat";
 
 // Get API key from environment or use provided key
 function getApiKey(providedKey?: string): string {
-  const apiKey = providedKey || process.env.TOGETHER_API_KEY || "";
+  const apiKey = providedKey || process.env.COHERE_API_KEY || "";
   return apiKey;
 }
 
@@ -44,59 +44,47 @@ Always maintain a professional, authoritative, yet accessible tone. When citing 
   return systemPrompt;
 }
 
-// Together AI chat completion
-async function togetherChat(
+// Cohere chat completion
+async function cohereChat(
   messages: Message[], 
   apiKey: string, 
-  fileContexts?: FileContext[],
-  stream: boolean = true
+  fileContexts?: FileContext[]
 ): Promise<ReadableStream> {
   const systemPrompt = buildSystemPrompt(fileContexts);
   
-  // Format messages for Together AI (OpenAI-compatible format)
-  const formattedMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages.map((msg) => ({
-      role: msg.role === "user" ? "user" : "assistant",
-      content: msg.content,
-    })),
-  ];
+  // Get the last user message
+  const lastMessage = messages[messages.length - 1];
+  const userMessage = lastMessage?.content || "";
 
-  const response = await fetch(TOGETHER_API_URL, {
+  // Build chat history for Cohere
+  const chatHistory = messages.slice(0, -1).map((msg) => ({
+    role: msg.role === "user" ? "USER" : "CHATBOT",
+    message: msg.content,
+  }));
+
+  const response = await fetch(COHERE_API_URL, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      messages: formattedMessages,
+      model: "command-r-plus",
+      message: userMessage,
+      preamble: systemPrompt,
+      chat_history: chatHistory.length > 0 ? chatHistory : undefined,
       max_tokens: 4096,
       temperature: 0.7,
-      top_p: 0.9,
-      stream: stream,
+      stream: true,
     }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `Together AI error: ${response.status}`);
+    throw new Error(errorData.message || `Cohere API error: ${response.status}`);
   }
 
-  if (!stream) {
-    // Non-streaming response
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    const encoder = new TextEncoder();
-    return new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(content));
-        controller.close();
-      },
-    });
-  }
-
-  // Streaming response
+  // Handle streaming response
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error("Failed to get response stream");
@@ -118,13 +106,15 @@ async function togetherChat(
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               const data = line.slice(6);
-              if (data === "[DONE]") continue;
+              if (!data.trim()) continue;
 
               try {
                 const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || "";
-                if (content) {
-                  controller.enqueue(encoder.encode(content));
+                if (parsed.event_type === "text-generation") {
+                  const content = parsed.text || "";
+                  if (content) {
+                    controller.enqueue(encoder.encode(content));
+                  }
                 }
               } catch {
                 // Skip invalid JSON
@@ -140,15 +130,15 @@ async function togetherChat(
   });
 }
 
-// Cloud chat using Together AI
+// Cloud chat using Cohere
 export async function ChatCloud(messages: Message[], apiKey?: string, fileContexts?: FileContext[]) {
   const key = getApiKey(apiKey);
   
   if (!key) {
-    throw new Error("API key is required. Please set TOGETHER_API_KEY in your environment or provide it in settings.");
+    throw new Error("API key is required. Please set COHERE_API_KEY in your environment or provide it in settings.");
   }
 
-  return togetherChat(messages, key, fileContexts, true);
+  return cohereChat(messages, key, fileContexts);
 }
 
 // Local chat (Ollama) - kept for backward compatibility
