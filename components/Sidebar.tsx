@@ -53,8 +53,8 @@ const Sidebar = ({ activeSection, setActiveSection, isOpen = true, onToggle }: S
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-navy-dark animate-pulse-gold"></div>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gradient-gold">GHOST</h1>
-                <p className="text-xs text-muted tracking-wider">ARCHITECT</p>
+                <h1 className="text-xl font-bold text-gradient-gold">Legal</h1>
+                <p className="text-xs text-muted tracking-wider">Oracle</p>
               </div>
             </div>
             {/* Mobile close button */}
@@ -128,7 +128,7 @@ const Sidebar = ({ activeSection, setActiveSection, isOpen = true, onToggle }: S
               <span className="text-sm font-medium text-gold">Cloud Mode</span>
             </div>
             <p className="text-xs text-muted">
-              Connected to Gemini AI for legal research
+              Connected to Cohere AI for legal research
             </p>
           </div>
 

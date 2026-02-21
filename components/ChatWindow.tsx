@@ -14,9 +14,10 @@ interface FileContext {
 
 interface ChatWindowProps {
   processedFiles: FileContext[];
+  quickPrompt?: string | null;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles, quickPrompt }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,6 +47,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles }) => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle quick prompt from parent
+  useEffect(() => {
+    if (quickPrompt && processedFiles.length > 0) {
+      setInput(quickPrompt);
+    }
+  }, [quickPrompt, processedFiles.length]);
 
   const handleNewChat = () => {
     const newSession = createChatSession("New Chat");

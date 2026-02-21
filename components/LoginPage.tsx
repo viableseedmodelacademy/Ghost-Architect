@@ -51,7 +51,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold to-gold-light flex items-center justify-center mx-auto mb-4 glow-gold">
             <Scale className="text-navy-dark" size={40} />
           </div>
-          <h1 className="text-3xl font-bold text-gradient-gold mb-2">THE LEGAL ORACLE</h1>
+          <h1 className="text-3xl font-bold text-gradient-gold mb-2">Legal Oracle</h1>
           <p className="text-muted">Enterprise-grade AI-powered legal research</p>
           <p className="text-xs text-muted mt-2">Powered By Alwenum AI</p>
         </div>
@@ -153,7 +153,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted mt-6">
-          © 2024 THE LEGAL ORACLE. All rights reserved.
+          © 2024 Legal Oracle. All rights reserved.
         </p>
       </div>
     </div>

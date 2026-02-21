@@ -229,7 +229,7 @@ const Settings = () => {
           </div>
           <div className="flex justify-between">
             <span className="text-muted">AI Model</span>
-            <span className="text-gold">Gemini Pro</span>
+            <span className="text-gold">Alwenum - "Command"</span>
           </div>
         </div>
       </div>

@@ -1,4 +1,3 @@
-import pdf from "pdf-parse";
 import mammoth from "mammoth";
 
 interface Message {
@@ -21,9 +20,12 @@ function getApiKey(providedKey?: string): string {
   return apiKey;
 }
 
-// Extract text from PDF base64 data URL
+// Extract text from PDF base64 data URL using dynamic import
 async function extractPdfText(dataUrl: string): Promise<string> {
   try {
+    // Dynamic import to avoid build-time issues
+    const pdfParse = (await import("pdf-parse")).default;
+    
     // Extract base64 data from data URL
     const base64Match = dataUrl.match(/^data:application\/pdf;base64,(.+)$/);
     if (!base64Match) {
@@ -34,7 +36,7 @@ async function extractPdfText(dataUrl: string): Promise<string> {
     const buffer = Buffer.from(base64Data, "base64");
     
     // Parse PDF
-    const data = await pdf(buffer);
+    const data = await pdfParse(buffer);
     return data.text;
   } catch (error) {
     console.error("PDF extraction error:", error);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import FileUploader from "../components/FileUploader";
 import ChatWindow from "../components/ChatWindow";
@@ -23,6 +23,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [quickActionPrompt, setQuickActionPrompt] = useState<string | null>(null);
+  const chatWindowRef = useRef<{ setQuickPrompt: (prompt: string) => void } | null>(null);
 
   // Check authentication status on mount - NO AUTO-LOGIN
   useEffect(() => {
@@ -82,6 +84,23 @@ export default function Home() {
     setProcessedFiles(files);
   };
 
+  const handleQuickAction = (action: string) => {
+    // Define prompts for each action
+    const prompts: Record<string, string> = {
+      "Summarize": "Please provide a comprehensive summary of the uploaded document(s). Include the main topics, key points, and any important conclusions or recommendations.",
+      "Extract Key Points": "Extract and list all the key points, important facts, and critical information from the uploaded document(s). Organize them in a clear, structured format.",
+      "Compare Documents": "Compare and contrast the uploaded documents. Identify similarities, differences, and any conflicting information between them. Provide a detailed analysis.",
+      "Ask Questions": "I have questions about the uploaded document(s). Please help me understand the content better."
+    };
+
+    const prompt = prompts[action];
+    if (prompt) {
+      setQuickActionPrompt(prompt);
+      // Clear the prompt after a short delay to allow the ChatWindow to pick it up
+      setTimeout(() => setQuickActionPrompt(null), 100);
+    }
+  };
+
   // Show loading screen
   if (isLoading) {
     return (
@@ -121,7 +140,7 @@ export default function Home() {
             
             <div className="flex-1 min-w-0">
               <h1 className="text-xl lg:text-3xl font-bold text-gradient-gold truncate">
-                THE LEGAL ORACLE
+                Legal Oracle
               </h1>
               <p className="text-muted mt-1 text-sm lg:text-base hidden sm:block">
                 AI-powered document chat platform
@@ -247,7 +266,9 @@ export default function Home() {
                       ].map((action, i) => (
                         <button
                           key={i}
-                          className="p-3 lg:p-4 text-left bg-surface/50 hover:bg-surface border border-border hover:border-gold/30 rounded-xl transition-all duration-200 group"
+                          onClick={() => handleQuickAction(action.title)}
+                          disabled={processedFiles.length === 0}
+                          className="p-3 lg:p-4 text-left bg-surface/50 hover:bg-surface border border-border hover:border-gold/30 rounded-xl transition-all duration-200 group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <p className="font-medium text-gold group-hover:text-gold-light transition-colors text-sm lg:text-base">
                             {action.title}
@@ -261,7 +282,7 @@ export default function Home() {
 
                 {/* Chat Section */}
                 <section className="bg-surface/20 rounded-2xl border border-border overflow-hidden h-[400px] lg:h-[600px]">
-                  <ChatWindow processedFiles={processedFiles} />
+                  <ChatWindow processedFiles={processedFiles} quickPrompt={quickActionPrompt} />
                 </section>
               </>
             )}
@@ -325,7 +346,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="px-4 lg:px-8 py-3 lg:py-4 border-t border-border bg-surface/20">
           <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-muted gap-2">
-            <p>© 2024 THE LEGAL ORACLE. All rights reserved.</p>
+            <p>© 2024 Legal Oracle. All rights reserved.</p>
             <p>Powered By Alwenum AI</p>
           </div>
         </footer>
