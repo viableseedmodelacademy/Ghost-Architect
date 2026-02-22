@@ -88,12 +88,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles, quickPrompt }) 
     e.preventDefault();
     
     if (!input.trim() || loading) return;
-    
-    // Check if documents are uploaded
-    if (processedFiles.length === 0) {
-      setError("Please upload documents first to start chatting.");
-      return;
-    }
 
     const userMessage = input.trim();
     setInput("");
@@ -277,8 +271,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles, quickPrompt }) 
               <FileText className="mx-auto text-gold mb-4" size={48} />
               <h3 className="text-xl font-bold text-gold mb-2">Start Chatting</h3>
               <p className="text-muted max-w-md mx-auto px-4">
-                Upload documents in the Private Vault and ask questions about them.
-                The AI will analyze your documents and provide insights.
+                Ask any legal question or upload documents for analysis.
+                I'm here to help with Nigerian law, contracts, and legal research.
               </p>
             </div>
           )}
@@ -310,7 +304,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles, quickPrompt }) 
               <div className="bg-surface/50 border border-border p-4 rounded-2xl">
                 <div className="flex items-center gap-2 text-gold">
                   <Loader2 className="animate-spin" size={20} />
-                  <span>Analyzing documents...</span>
+                  <span>Thinking...</span>
                 </div>
               </div>
             </div>
@@ -353,18 +347,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ processedFiles, quickPrompt }) 
                   handleSubmit(e);
                 }
               }}
-              placeholder={processedFiles.length === 0 
-                ? "Upload documents first to start chatting..." 
-                : "Ask a question about your documents..."
-              }
-              disabled={loading || processedFiles.length === 0}
+              placeholder="Ask a legal question or upload documents for analysis..."
+              disabled={loading}
               rows={1}
               className="flex-1 min-w-0 px-4 py-3 bg-navy-dark border border-border rounded-xl text-gold placeholder-muted focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-200 disabled:opacity-50 resize-none overflow-y-auto"
               style={{ maxHeight: '200px' }}
             />
             <button
               type="submit"
-              disabled={loading || !input.trim() || processedFiles.length === 0}
+              disabled={loading || !input.trim()}
               className="px-4 lg:px-6 py-3 bg-gradient-to-r from-gold to-gold-light text-navy-dark font-semibold rounded-xl hover:shadow-lg hover:shadow-gold/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center flex-shrink-0"
             >
               <Send size={18} />
